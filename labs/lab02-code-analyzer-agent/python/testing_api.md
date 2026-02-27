@@ -167,7 +167,7 @@ The `test_api.sh` script tests all 4 endpoints automatically.
 
 **Production Testing:**
 ```bash
-./test_api.sh https://your-deployment-url.com
+./test_api.sh https://code-analyzer-agent-production.up.railway.app
 ```
 
 ### What It Tests
