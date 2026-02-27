@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --matrix-bg: #0d0208;
+  --matrix-bg-secondary: #1a1a1a;
+  --matrix-green: #00ff41;
+  --matrix-green-dark: #008f11;
+  --matrix-border: #00ff4133;
+  --matrix-text: #00ff41;
+  --matrix-text-dim: #00aa2e;
+}
+
+body {
+  background: var(--matrix-bg);
+  color: var(--matrix-text);
+  font-family: 'Courier New', monospace;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .matrix-border {
+    border: 1px solid var(--matrix-border);
+  }
+  
+  .matrix-button {
+    background: var(--matrix-green-dark);
+    border: 1px solid var(--matrix-green);
+    color: #000;
+    font-weight: bold;
+    transition: all 0.2s ease;
+  }
+  
+  .matrix-button:hover:not(:disabled) {
+    background: var(--matrix-green);
+  }
+  
+  .matrix-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .matrix-input {
+    background: rgba(0, 255, 65, 0.05);
+    border: 1px solid var(--matrix-green-dark);
+    color: var(--matrix-text);
+    transition: all 0.2s ease;
+  }
+  
+  .matrix-input:focus {
+    outline: none;
+    border-color: var(--matrix-green);
+  }
+  
+  .matrix-input::placeholder {
+    color: var(--matrix-text-dim);
+  }
+}
+

@@ -1,0 +1,11 @@
+# Railway will auto-detect Python and use requirements.txt
+# The Procfile defines the start command
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
