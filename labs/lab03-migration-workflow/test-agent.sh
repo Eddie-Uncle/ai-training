@@ -98,6 +98,11 @@ check_field  "success is true"             "$RESP" "['success']"         "True"
 check_truthy "migrated_files populated"    "$RESP" "['migrated_files']"
 check_truthy "plan_executed populated"     "$RESP" "['plan_executed']"
 check_field  "errors list is empty"        "$RESP" "['errors']"          "[]"
+# Planning agent telemetry
+ITERS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['iterations_count'])" 2>/dev/null || echo 0)
+TCELLS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['tool_calls_count'])" 2>/dev/null || echo 0)
+[[ "$ITERS" -gt 0 ]]  && pass "iterations_count > 0 (got $ITERS)"  || fail "iterations_count = 0"
+[[ "$TCELLS" -ge 4 ]] && pass "tool_calls_count >= 4 (got $TCELLS)" || fail "tool_calls_count < 4 (got $TCELLS)"
 
 # ── TEST 4: Express → FastAPI multi-file ──────────────────────────────────────
 
@@ -134,19 +139,34 @@ check_field  "success is true"          "$RESP" "['success']"   "True"
 check_truthy "migrated_files populated" "$RESP" "['migrated_files']"
 check_field  "errors list is empty"     "$RESP" "['errors']"    "[]"
 
-# ── TEST 6: Empty files (edge case) ───────────────────────────────────────────
+# ── TEST 6: Empty files → 422 ─────────────────────────────────────────────────
 
-header "Test 6: Empty files payload (graceful handling)"
-RESP=$(curl -sf -X POST "$BASE_URL/migrate" \
+header "Test 6: Empty files payload → HTTP 422"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/migrate" \
   -H "Content-Type: application/json" \
-  -d '{"source_framework":"express","target_framework":"fastapi","files":{}}' || echo '{}')
-echo "$RESP" | python3 -m json.tool 2>/dev/null | head -5
-# Agent may succeed (LLM invents example) or fail gracefully — both are valid
-PARSEABLE=$(echo "$RESP" | python3 -c "import sys,json; json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
-if [[ "$PARSEABLE" == "ok" ]]; then
-  pass "returns valid JSON response"
+  -d '{"source_framework":"express","target_framework":"fastapi","files":{}}')
+echo "  HTTP $HTTP_CODE"
+[[ "$HTTP_CODE" == "422" ]] && pass "returns 422 for empty files" || fail "expected 422, got $HTTP_CODE"
+
+# ── TEST 7: SSE streaming endpoint ────────────────────────────────────────────
+
+header "Test 7: SSE /migrate/stream"
+STREAM=$(curl -sf --max-time 120 -X POST "$BASE_URL/migrate/stream" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_framework": "express",
+    "target_framework": "fastapi",
+    "files": {
+      "app.js": "const express = require(\"express\");\nconst app = express();\napp.get(\"/ping\", (req, res) => res.json({pong: true}));\napp.listen(3000);"
+    }
+  }' 2>/dev/null || echo "")
+FINAL_LINE=$(echo "$STREAM" | grep '^data:' | tail -1 | sed 's/^data: //')
+if [[ -n "$FINAL_LINE" ]]; then
+  pass "SSE stream produced events"
+  HAS_COMPLETE=$(echo "$FINAL_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('phase',''))" 2>/dev/null || echo "")
+  [[ "$HAS_COMPLETE" == "complete" ]] && pass "final event has phase=complete" || fail "final event phase: $HAS_COMPLETE"
 else
-  fail "response is not valid JSON"
+  fail "SSE stream returned no events"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────

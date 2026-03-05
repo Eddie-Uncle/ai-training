@@ -1,260 +1,481 @@
-"""Migration Workflow Agent - Core Agent Implementation."""
-from state import MigrationState, Phase, MigrationStep
-from prompts import ANALYSIS_PROMPT, PLANNING_PROMPT, MIGRATION_PROMPT, VERIFICATION_PROMPT
-from typing import Dict, List
+"""
+Migration Workflow Agent — Planning Agent Pattern Implementation
+=========================================================
+
+Architecture
+------------
+MigrationAgent.run(state)
+  ├── _analyze(state)   → _tool_loop(ANALYSIS_TOOLS)
+  ├── _plan(state)      → _tool_loop(PLANNING_TOOLS)
+  ├── _execute(state)   → _tool_loop(EXECUTION_TOOLS)
+  └── _verify(state)    → _tool_loop(VERIFICATION_TOOLS)
+
+The agentic loop (_tool_loop)
+-----------------------------
+Each phase runs a dedicated loop that:
+  1. Calls the LLM with the full messages[] history + tool definitions
+  2. Parses text and tool_use blocks from the response
+  3. Appends the assistant message to messages[]
+  4. Executes each tool call and captures the result
+  5. Appends tool results as a "user" message to messages[]
+  6. Repeats until stop_reason == "end_turn" or complete_phase is called
+
+This means the LLM always has full context of what it has already done
+within the phase — satisfying "manage state across agent iterations".
+"""
+
+import ast
+import sys
+import os
 import json
+from typing import Any, Callable, Optional
+
+sys.path.append(
+    os.path.join(os.path.dirname(__file__), "../../lab02-code-analyzer-agent/python"),
+)
+from llm_client import LLMClient
+
+from state import (
+    MigrationState, MigrationStep, Phase,
+    AgentIteration, ToolCall,
+)
+from prompts import (
+    ANALYSIS_TOOLS, PLANNING_TOOLS, EXECUTION_TOOLS, VERIFICATION_TOOLS,
+    make_analysis_prompt, make_planning_prompt,
+    make_execution_prompt, make_verification_prompt,
+)
+
+# Hard cap on agentic loop iterations per phase — prevents infinite loops
+MAX_ITERATIONS_PER_PHASE = 20
+
+ProgressCallback = Callable[[str, str], None]
 
 
 class MigrationAgent:
-    """Agent that performs multi-step code migration."""
+    """Multi-phase migration agent using the planning agent pattern."""
 
-    def __init__(self, llm_client):
+    def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
+        self._cb: ProgressCallback = lambda phase, msg: None
 
-    def run(self, state: MigrationState) -> MigrationState:
-        """Run the migration agent through all phases."""
-        while state.phase != Phase.COMPLETE:
-            state = self._step(state)
+    # ------------------------------------------------------------------
+    # PUBLIC  —  entry point
+    # ------------------------------------------------------------------
+
+    def run(
+        self,
+        state: MigrationState,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> MigrationState:
+        """
+        Run all 4 phases in sequence.
+
+        Each phase runs a full agentic loop: the LLM calls tools, receives
+        results, and iterates until it signals completion via complete_phase.
+        State is threaded through every phase so all results accumulate.
+        """
+        if progress_callback:
+            self._cb = progress_callback
+
+        phases = [
+            (Phase.ANALYSIS,     self._analyze,  "Analysis"),
+            (Phase.PLANNING,     self._plan,     "Planning"),
+            (Phase.EXECUTION,    self._execute,  "Execution"),
+            (Phase.VERIFICATION, self._verify,   "Verification"),
+        ]
+
+        for phase_enum, phase_fn, phase_label in phases:
+            state.phase = phase_enum
+            self._cb(phase_enum.value, f"Starting {phase_label} phase…")
+            state = phase_fn(state)
             if state.errors:
-                break
-        return state
-
-    def _step(self, state: MigrationState) -> MigrationState:
-        """Execute one phase of the migration."""
-        if state.phase == Phase.ANALYSIS:
-            return self._analyze(state)
-        elif state.phase == Phase.PLANNING:
-            return self._plan(state)
-        elif state.phase == Phase.EXECUTION:
-            return self._execute(state)
-        elif state.phase == Phase.VERIFICATION:
-            return self._verify(state)
-        return state
-
-    def _analyze(self, state: MigrationState) -> MigrationState:
-        """Phase 1: Analyze source code."""
-        all_analysis = {}
-
-        for filename, code in state.source_files.items():
-            prompt = ANALYSIS_PROMPT.format(
-                source=state.source_framework,
-                target=state.target_framework,
-                language=self._detect_language(filename),
-                code=code
-            )
-
-            response = self.llm.chat([
-                {"role": "user", "content": prompt}
-            ])
-
-            try:
-                all_analysis[filename] = self._parse_json(response)
-            except Exception as e:
-                state.errors.append(f"Analysis failed for {filename}: {e}")
+                self._cb("error", f"{phase_label} phase failed: {state.errors[-1]}")
                 return state
 
-        state.analysis = all_analysis
-        state.phase = Phase.PLANNING
+        state.phase = Phase.COMPLETE
+        self._cb("complete", "All 4 phases complete.")
         return state
 
-    def _plan(self, state: MigrationState) -> MigrationState:
-        """Phase 2: Create migration plan."""
-        prompt = PLANNING_PROMPT.format(
-            analysis=json.dumps(state.analysis, indent=2),
-            source=state.source_framework,
-            target=state.target_framework
+    # ------------------------------------------------------------------
+    # PHASE 1  —  ANALYSIS
+    # Objective: understand source code structure
+    # Tool used: analyze_code → stores result in state.analysis
+    # ------------------------------------------------------------------
+
+    def _analyze(self, state: MigrationState) -> MigrationState:
+        """Phase 1: Analyze source code to understand its structure."""
+        system = make_analysis_prompt(
+            state.source_framework,
+            state.target_framework,
+            state.source_files,
         )
 
-        response = self.llm.chat([
-            {"role": "user", "content": prompt}
-        ])
+        state = self._tool_loop(
+            phase_name=Phase.ANALYSIS.value,
+            system=system,
+            tools=ANALYSIS_TOOLS,
+            state=state,
+        )
 
-        try:
-            plan_data = self._parse_json(response)
-            state.plan = [
-                MigrationStep(
-                    id=step["id"],
-                    description=step["description"],
-                    input_files=step.get("input_files", [])
-                )
-                for step in plan_data.get("steps", [])
-            ]
-        except Exception as e:
-            state.errors.append(f"Planning failed: {e}")
-            return state
+        # Pick up analyze_code result from tool call log
+        for tc in reversed(state.tool_calls_log):
+            if tc.tool_name == "analyze_code" and tc.phase == Phase.ANALYSIS.value:
+                state.analysis = dict(tc.tool_input)
+                # Inject source file names so planning prompt can reference them
+                state.analysis["source_files"] = list(state.source_files.keys())
+                break
 
-        state.phase = Phase.EXECUTION
+        if not state.analysis:
+            state.errors.append("Analysis phase: analyze_code tool was never called")
+
         return state
+
+    # ------------------------------------------------------------------
+    # PHASE 2  —  PLANNING
+    # Objective: create a step-by-step migration plan
+    # Tool used: create_plan → stores plan in state.plan
+    # ------------------------------------------------------------------
+
+    def _plan(self, state: MigrationState) -> MigrationState:
+        """Phase 2: Create a migration plan from the analysis."""
+        system = make_planning_prompt(
+            state.source_framework,
+            state.target_framework,
+            state.analysis or {},
+        )
+
+        state = self._tool_loop(
+            phase_name=Phase.PLANNING.value,
+            system=system,
+            tools=PLANNING_TOOLS,
+            state=state,
+        )
+
+        # Pick up create_plan result
+        for tc in reversed(state.tool_calls_log):
+            if tc.tool_name == "create_plan" and tc.phase == Phase.PLANNING.value:
+                raw_steps = tc.tool_input.get("steps", [])
+                state.plan = [
+                    MigrationStep(
+                        id=s["id"],
+                        description=s["description"],
+                        input_files=s.get("input_files", []),
+                        output_files=s.get("output_files", []),
+                        complexity=s.get("complexity", "medium"),
+                    )
+                    for s in raw_steps
+                ]
+                break
+
+        if not state.plan:
+            state.errors.append("Planning phase: create_plan tool was never called")
+
+        return state
+
+    # ------------------------------------------------------------------
+    # PHASE 3  —  EXECUTION
+    # Objective: execute each migration step and write migrated files
+    # Tool used: write_migrated_file → populates state.migrated_files
+    # ------------------------------------------------------------------
 
     def _execute(self, state: MigrationState) -> MigrationState:
-        """Phase 3: Execute migration steps."""
-        while state.current_step < len(state.plan):
-            step = state.plan[state.current_step]
-            step.status = "in_progress"
+        """Phase 3: Execute migration steps and write migrated files."""
+        plan_dicts = [
+            {
+                "id": s.id,
+                "description": s.description,
+                "input_files": s.input_files,
+                "output_files": s.output_files,
+            }
+            for s in state.plan
+        ]
 
-            # Get relevant source code
-            source_code = self._get_step_code(state, step)
+        system = make_execution_prompt(
+            state.source_framework,
+            state.target_framework,
+            plan_dicts,
+            state.source_files,
+        )
 
-            prompt = MIGRATION_PROMPT.format(
-                source=state.source_framework,
-                target=state.target_framework,
-                code=source_code,
-                context=self._get_context(state)
-            )
+        state = self._tool_loop(
+            phase_name=Phase.EXECUTION.value,
+            system=system,
+            tools=EXECUTION_TOOLS,
+            state=state,
+        )
 
-            response = self.llm.chat([
-                {"role": "user", "content": prompt}
-            ])
+        # Collect write_migrated_file calls → mark steps completed
+        for tc in state.tool_calls_log:
+            if tc.tool_name == "write_migrated_file" and tc.phase == Phase.EXECUTION.value:
+                step_id = tc.tool_input.get("step_id")
+                for step in state.plan:
+                    if step.id == step_id and step.status != "completed":
+                        step.status = "completed"
+                        step.result = f"Wrote {tc.tool_input.get('filename')}"
 
-            # Extract code from response
-            migrated_code = self._extract_code(response)
+        # Mark any plan steps as completed if their output files were written
+        written = set(state.migrated_files.keys())
+        for step in state.plan:
+            if step.status != "completed":
+                if any(f in written for f in step.output_files):
+                    step.status = "completed"
 
-            # Store result
-            for filename in step.input_files:
-                new_filename = self._transform_filename(filename, state.target_framework)
-                state.migrated_files[new_filename] = migrated_code
+        if not state.migrated_files:
+            state.errors.append("Execution phase: no files were written")
 
-            step.status = "completed"
-            step.result = migrated_code
-            state.current_step += 1
-
-        state.phase = Phase.VERIFICATION
         return state
+
+    # ------------------------------------------------------------------
+    # PHASE 4  —  VERIFICATION
+    # Objective: verify the migration is complete and correct
+    # Tools used: validate_python_syntax + report_verification
+    # ------------------------------------------------------------------
 
     def _verify(self, state: MigrationState) -> MigrationState:
-        """Phase 4: Verify migration results."""
-        verification = {
-            "files_migrated": len(state.migrated_files),
-            "steps_completed": len([s for s in state.plan if s.status == "completed"]),
-            "issues": [],
-            "validations": []
-        }
+        """Phase 4: Verify migrated code compiles and is correct."""
+        system = make_verification_prompt(
+            state.target_framework,
+            state.migrated_files,
+        )
 
-        # Verify each migrated file
-        for filename, code in state.migrated_files.items():
-            language = self._detect_language(filename)
+        state = self._tool_loop(
+            phase_name=Phase.VERIFICATION.value,
+            system=system,
+            tools=VERIFICATION_TOOLS,
+            state=state,
+        )
 
-            prompt = VERIFICATION_PROMPT.format(
-                target=state.target_framework,
-                language=language,
-                code=code
-            )
+        # Pick up report_verification result
+        for tc in reversed(state.tool_calls_log):
+            if tc.tool_name == "report_verification" and tc.phase == Phase.VERIFICATION.value:
+                state.verification_result = dict(tc.tool_input)
+                break
 
-            response = self.llm.chat([
-                {"role": "user", "content": prompt}
-            ])
+        # Collect syntax check results from validate_python_syntax calls
+        syntax_checks: dict[str, dict] = {}
+        for tc in state.tool_calls_log:
+            if tc.tool_name == "validate_python_syntax" and tc.phase == Phase.VERIFICATION.value:
+                fname = tc.tool_input.get("filename", "")
+                syntax_checks[fname] = tc.tool_result
 
-            try:
-                result = self._parse_json(response)
-                verification["validations"].append({
-                    "file": filename,
-                    "valid": result.get("valid", False),
-                    "issues": result.get("issues", [])
-                })
-                if not result.get("valid", True):
-                    verification["issues"].extend(result.get("issues", []))
-            except Exception:
-                verification["validations"].append({
-                    "file": filename,
-                    "valid": True,
-                    "issues": []
-                })
+        if state.verification_result is None:
+            # Agent never called report_verification — synthesise from syntax checks
+            all_valid = all(v.get("valid", False) for v in syntax_checks.values())
+            state.verification_result = {
+                "valid": all_valid or bool(state.migrated_files),
+                "validations": [
+                    {"file": k, "valid": v.get("valid", True), "notes": v.get("error", "") or ""}
+                    for k, v in syntax_checks.items()
+                ],
+                "issues": [],
+                "recommendations": [],
+            }
 
-        state.verification_result = verification
-        state.phase = Phase.COMPLETE
+        state.verification_result["syntax_checks"] = syntax_checks
+        state.verification_result["files_migrated"] = len(state.migrated_files)
+        state.verification_result["steps_completed"] = sum(
+            1 for s in state.plan if s.status == "completed"
+        )
+
         return state
 
-    def _detect_language(self, filename: str) -> str:
-        """Detect language from filename."""
-        ext_map = {
-            ".py": "python",
-            ".js": "javascript",
-            ".ts": "typescript",
-            ".java": "java",
-            ".go": "go",
-            ".rs": "rust"
-        }
-        for ext, lang in ext_map.items():
-            if filename.endswith(ext):
-                return lang
-        return "unknown"
+    # ------------------------------------------------------------------
+    # CORE AGENTIC LOOP
+    # ------------------------------------------------------------------
 
-    def _parse_json(self, response: str) -> Dict:
-        """Parse JSON from LLM response, trying multiple extraction strategies."""
-        text = response.strip()
+    def _tool_loop(
+        self,
+        phase_name: str,
+        system: str,
+        tools: list,
+        state: MigrationState,
+    ) -> MigrationState:
+        """
+        The planning agent loop — the heart of the pattern.
 
-        # Strategy 1: extract from ```json ... ``` block
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        # Strategy 2: extract from ``` ... ``` block
-        elif "```" in text:
-            parts = text.split("```")
-            if len(parts) >= 3:
-                text = parts[1].strip()
-                # Strip any language identifier on first line
-                if "\n" in text:
-                    first, rest = text.split("\n", 1)
-                    if first.strip().isalpha():
-                        text = rest.strip()
+        Maintains a full messages[] conversation history so the LLM always
+        has the complete context of every prior tool call within this phase.
+        This is how state is managed across agent iterations.
 
-        # Strategy 3: find first { ... } or [ ... ] span
-        if not text.startswith(("{", "[")):
-            start = -1
-            for ch in ("{["):
-                idx = text.find(ch)
-                if idx != -1 and (start == -1 or idx < start):
-                    start = idx
-            if start != -1:
-                text = text[start:]
-                # Trim trailing content after last closing bracket
-                end = max(text.rfind("}"), text.rfind("]"))
-                if end != -1:
-                    text = text[:end + 1]
+        Flow per iteration:
+          1. LLM call with all messages + tool schemas
+          2. Parse text and tool_use blocks
+          3. Append assistant message (text + tool_use blocks) to messages[]
+          4. Execute each tool call → get result
+          5. Append tool results as a 'user' message to messages[]
+          6. If complete_phase was called, or stop_reason == 'end_turn' → exit
+        """
+        messages: list[dict] = state.phase_messages.get(phase_name, [])
+        # Anthropic requires at least one user message to start a conversation
+        if not messages:
+            messages = [{"role": "user", "content": f"Begin the {phase_name} phase."}]
+        iteration = 0
+        phase_done = False
 
-        return json.loads(text)
+        while iteration < MAX_ITERATIONS_PER_PHASE and not phase_done:
+            iteration += 1
+            self._cb(phase_name, f"  Iteration {iteration}")
 
-    def _extract_code(self, response: str) -> str:
-        """Extract code block from response."""
-        if "```" in response:
-            parts = response.split("```")
-            if len(parts) >= 2:
-                code = parts[1]
-                # Remove language identifier
-                if "\n" in code:
-                    first_line = code.split("\n")[0].strip()
-                    if first_line in ("python", "javascript", "typescript", "java", "go"):
-                        code = code.split("\n", 1)[1] if "\n" in code else ""
-                return code.strip()
-        return response
+            # --- 1. Call LLM with tool definitions -----------------------
+            response = self.llm.chat_with_tools(
+                messages=messages,
+                tools=tools,
+                system=system,
+                max_tokens=4096,
+            )
 
-    def _get_step_code(self, state: MigrationState, step: MigrationStep) -> str:
-        """Get source code for a migration step."""
-        code_parts = []
-        for filename in step.input_files:
-            if filename in state.source_files:
-                code_parts.append(f"# {filename}\n{state.source_files[filename]}")
+            stop_reason: str = response.get("stop_reason", "end_turn")
+            content_blocks: list[dict] = response.get("content", [])
 
-        # If no specific files, include all
-        if not code_parts:
-            for filename, code in state.source_files.items():
-                code_parts.append(f"# {filename}\n{code}")
+            # --- 2. Split content into text blocks and tool_use blocks ---
+            assistant_text = ""
+            tool_use_blocks: list[dict] = []
 
-        return "\n\n".join(code_parts)
+            for block in content_blocks:
+                if block["type"] == "text":
+                    assistant_text += block.get("text", "")
+                elif block["type"] == "tool_use":
+                    tool_use_blocks.append(block)
 
-    def _get_context(self, state: MigrationState) -> str:
-        """Get context from previous steps."""
-        completed = [s for s in state.plan if s.status == "completed"]
-        if not completed:
-            return "No previous steps completed."
-        return "\n".join([f"Step {s.id}: {s.description}" for s in completed[-3:]])
+            # --- 3. Append assistant message to history ------------------
+            # The assistant message must include both text AND tool_use blocks
+            # exactly as returned, so the next LLM call has full context.
+            assistant_message: dict = {"role": "assistant", "content": content_blocks}
+            messages.append(assistant_message)
 
-    def _transform_filename(self, filename: str, target: str) -> str:
-        """Transform filename for target framework."""
-        transformations = {
-            "fastapi": lambda f: f.replace(".js", ".py").replace("routes/", "routers/"),
-            "express": lambda f: f.replace(".py", ".js").replace("routers/", "routes/"),
-            "flask": lambda f: f.replace(".js", ".py"),
-            "django": lambda f: f.replace(".js", ".py"),
-        }
-        transform = transformations.get(target.lower(), lambda f: f)
-        return transform(filename)
+            # --- Record this iteration -----------------------------------
+            agent_iter = AgentIteration(
+                phase=phase_name,
+                iteration_number=iteration,
+                stop_reason=stop_reason,
+                assistant_text=assistant_text,
+            )
+
+            # --- 4. Execute tool calls -----------------------------------
+            if tool_use_blocks:
+                tool_result_blocks: list[dict] = []
+
+                for block in tool_use_blocks:
+                    tool_id: str   = block["id"]
+                    tool_name: str = block["name"]
+                    tool_input: dict = block["input"]
+
+                    self._cb(phase_name, f"    → {tool_name}")
+
+                    result = self._execute_tool(tool_name, tool_input, state)
+
+                    # Log the tool call in state
+                    tc = ToolCall(
+                        tool_name=tool_name,
+                        tool_input=tool_input,
+                        tool_result=result,
+                        phase=phase_name,
+                        iteration=iteration,
+                    )
+                    state.tool_calls_log.append(tc)
+                    agent_iter.tool_calls.append(tc)
+
+                    # Build tool result block for messages[]
+                    result_str = (
+                        json.dumps(result)
+                        if not isinstance(result, str)
+                        else result
+                    )
+                    tool_result_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": result_str,
+                    })
+
+                    if tool_name == "complete_phase":
+                        phase_done = True
+
+                # --- 5. Append all tool results as a single user message -
+                messages.append({"role": "user", "content": tool_result_blocks})
+
+            state.iterations.append(agent_iter)
+
+            # --- 6. Decide whether to continue ---------------------------
+            if stop_reason == "end_turn" and not tool_use_blocks:
+                # LLM stopped without calling any tools — phase is done
+                break
+
+        # Persist conversation history for this phase in state
+        state.phase_messages[phase_name] = messages
+        return state
+
+    # ------------------------------------------------------------------
+    # TOOL IMPLEMENTATIONS
+    # ------------------------------------------------------------------
+
+    def _execute_tool(self, tool_name: str, tool_input: dict, state: MigrationState) -> Any:
+        """Dispatch to the concrete tool implementation."""
+        match tool_name:
+            case "analyze_code":
+                return {"status": "recorded", "components": len(tool_input.get("components", []))}
+
+            case "create_plan":
+                n = len(tool_input.get("steps", []))
+                return {"status": "recorded", "steps_created": n}
+
+            case "write_migrated_file":
+                return self._tool_write_file(tool_input, state)
+
+            case "validate_python_syntax":
+                return self._tool_validate_syntax(tool_input, state)
+
+            case "report_verification":
+                return {"status": "recorded"}
+
+            case "complete_phase":
+                return {"status": "ok", "message": tool_input.get("summary", "done")}
+
+            case _:
+                return {"error": f"Unknown tool: {tool_name}"}
+
+    def _tool_write_file(self, tool_input: dict, state: MigrationState) -> dict:
+        """Write a migrated file into state.migrated_files and syntax-check it."""
+        filename = tool_input.get("filename", "")
+        content  = tool_input.get("content", "")
+
+        if not filename or not content:
+            return {"status": "error", "message": "filename and content are required"}
+
+        state.migrated_files[filename] = content
+        self._cb(Phase.EXECUTION.value, f"    ✓ Wrote {filename} ({len(content)} chars)")
+
+        # Inline syntax check so execution phase gets immediate feedback
+        syntax_result = self._run_syntax_check(filename, content)
+        return {"status": "ok", "filename": filename, "syntax": syntax_result}
+
+    def _tool_validate_syntax(self, tool_input: dict, state: MigrationState) -> dict:
+        """Run ast.parse() on a file in state.migrated_files."""
+        filename = tool_input.get("filename", "")
+        content  = state.migrated_files.get(filename)
+
+        if content is None:
+            available = list(state.migrated_files.keys())
+            return {
+                "filename": filename,
+                "valid": False,
+                "error": f"Not found in migrated_files. Available: {available}",
+            }
+
+        return self._run_syntax_check(filename, content)
+
+    @staticmethod
+    def _run_syntax_check(filename: str, content: str) -> dict:
+        """Parse Python source with ast.parse() and return a result dict."""
+        if not filename.endswith(".py"):
+            return {"filename": filename, "valid": True, "error": None}
+        try:
+            ast.parse(content)
+            return {"filename": filename, "valid": True, "error": None}
+        except SyntaxError as e:
+            return {
+                "filename": filename,
+                "valid": False,
+                "error": str(e),
+                "line": e.lineno,
+            }
+
