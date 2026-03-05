@@ -16,10 +16,10 @@ class LLMClient(ABC):
 class AnthropicClient(LLMClient):
     """Anthropic Claude client."""
 
-    def __init__(self, model: str = "claude-3-5-sonnet-20241022"):
+    def __init__(self, model: str = None):
         from anthropic import Anthropic
         self.client = Anthropic()
-        self.model = model
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
 
     def chat(self, messages: List[Dict[str, str]]) -> str:
         system = None
@@ -30,11 +30,14 @@ class AnthropicClient(LLMClient):
             else:
                 filtered.append(m)
 
+        kwargs = {}
+        if system:
+            kwargs["system"] = system
         response = self.client.messages.create(
             model=self.model,
             max_tokens=4096,
-            system=system,
-            messages=filtered
+            messages=filtered,
+            **kwargs
         )
         return response.content[0].text
 

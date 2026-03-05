@@ -13,7 +13,7 @@ Identify:
 3. Framework-specific patterns
 4. Potential migration challenges
 
-Return as JSON:
+Respond with ONLY valid JSON and no other text:
 {{
   "components": [
     {{"name": "...", "type": "class|function|route", "description": "..."}}
@@ -39,7 +39,7 @@ Create a step-by-step plan. Each step should be:
 - Ordered by dependencies
 - Specific about what changes
 
-Return as JSON:
+Respond with ONLY valid JSON and no other text:
 {{
   "steps": [
     {{
@@ -84,7 +84,7 @@ Check for:
 3. Framework compatibility issues
 4. Logic errors
 
-Return as JSON:
+Respond with ONLY valid JSON and no other text:
 {{
   "valid": true|false,
   "issues": [

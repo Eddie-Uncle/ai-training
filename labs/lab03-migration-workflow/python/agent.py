@@ -180,12 +180,38 @@ class MigrationAgent:
         return "unknown"
 
     def _parse_json(self, response: str) -> Dict:
-        """Parse JSON from LLM response."""
-        if "```json" in response:
-            response = response.split("```json")[1].split("```")[0]
-        elif "```" in response:
-            response = response.split("```")[1].split("```")[0]
-        return json.loads(response.strip())
+        """Parse JSON from LLM response, trying multiple extraction strategies."""
+        text = response.strip()
+
+        # Strategy 1: extract from ```json ... ``` block
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        # Strategy 2: extract from ``` ... ``` block
+        elif "```" in text:
+            parts = text.split("```")
+            if len(parts) >= 3:
+                text = parts[1].strip()
+                # Strip any language identifier on first line
+                if "\n" in text:
+                    first, rest = text.split("\n", 1)
+                    if first.strip().isalpha():
+                        text = rest.strip()
+
+        # Strategy 3: find first { ... } or [ ... ] span
+        if not text.startswith(("{", "[")):
+            start = -1
+            for ch in ("{["):
+                idx = text.find(ch)
+                if idx != -1 and (start == -1 or idx < start):
+                    start = idx
+            if start != -1:
+                text = text[start:]
+                # Trim trailing content after last closing bracket
+                end = max(text.rfind("}"), text.rfind("]"))
+                if end != -1:
+                    text = text[:end + 1]
+
+        return json.loads(text)
 
     def _extract_code(self, response: str) -> str:
         """Extract code block from response."""
