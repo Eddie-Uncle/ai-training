@@ -7,7 +7,7 @@
 ## Run the Full Test Suite
 
 ```bash
-cd /Users/eagle/code/ai-training/labs/lab03-migration-workflow
+cd $HOME/code/ai-training/labs/lab03-migration-workflow
 bash test-agent.sh https://vercel-api-five-olive.vercel.app
 ```
 
