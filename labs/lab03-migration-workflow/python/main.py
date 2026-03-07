@@ -8,10 +8,14 @@ import json
 from dotenv import load_dotenv
 load_dotenv()   # picks up ./python/.env  (contains ANTHROPIC_API_KEY)
 
-sys.path.append(
-    os.path.join(os.path.dirname(__file__), "../../lab02-code-analyzer-agent/python"),
-)
-from llm_client import get_llm_client
+# Try local vendored copy first (Railway/production), fall back to lab02 source
+try:
+    from llm_client import get_llm_client
+except ImportError:
+    sys.path.append(
+        os.path.join(os.path.dirname(__file__), "../../lab02-code-analyzer-agent/python")
+    )
+    from llm_client import get_llm_client
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

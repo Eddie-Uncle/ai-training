@@ -30,10 +30,14 @@ import os
 import json
 from typing import Any, Callable, Optional
 
-sys.path.append(
-    os.path.join(os.path.dirname(__file__), "../../lab02-code-analyzer-agent/python"),
-)
-from llm_client import LLMClient
+# Try local vendored copy first (Railway/production), fall back to lab02 source
+try:
+    from llm_client import LLMClient
+except ImportError:
+    sys.path.append(
+        os.path.join(os.path.dirname(__file__), "../../lab02-code-analyzer-agent/python")
+    )
+    from llm_client import LLMClient
 
 from state import (
     MigrationState, MigrationStep, Phase,
