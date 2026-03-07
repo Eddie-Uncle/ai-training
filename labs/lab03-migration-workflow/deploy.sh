@@ -142,20 +142,34 @@ deploy_vercel() {
 
   check_env_var ANTHROPIC_API_KEY
 
-  # Vercel serves Python via serverless functions — we need api/index.py
+  # Vercel deploys from a flat directory — all source files must live at the
+  # root (/var/task/) so they are importable. We copy everything there and
+  # use api/index.py as a thin entry-point that just re-exports `app`.
   local api_dir="$PYTHON_DIR/../vercel-api"
+  rm -rf "$api_dir"
   mkdir -p "$api_dir/api"
 
-  # Write api/index.py wrapping the FastAPI app
+  # Copy all Python source files to the deploy root
+  for f in main.py agent.py state.py prompts.py llm_client.py; do
+    src="$PYTHON_DIR/$f"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$api_dir/$f"
+      echo "  Copied $f"
+    else
+      yellow "  WARNING: $f not found in $PYTHON_DIR, skipping"
+    fi
+  done
+
+  # Also copy .env if present (for ANTHROPIC_API_KEY at runtime)
+  [[ -f "$PYTHON_DIR/.env" ]] && cp "$PYTHON_DIR/.env" "$api_dir/.env"
+
+  # Write api/index.py — all source files are at /var/task/ so import works
   cat > "$api_dir/api/index.py" <<'PYEOF'
 """Vercel serverless entry-point for the Migration Workflow Agent."""
-import sys
-import os
-
-# Add the python/ dir so imports work
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../python"))
-
-from main import app  # noqa: F401  — Vercel picks up 'app' automatically
+# All source files (main.py, agent.py, state.py, prompts.py, llm_client.py)
+# are copied to the deploy root (/var/task/) at deploy time, so this import
+# resolves correctly inside Vercel's serverless runtime.
+from main import app  # noqa: F401
 PYEOF
 
   # Write vercel.json
