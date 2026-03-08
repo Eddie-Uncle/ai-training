@@ -1,33 +1,48 @@
-"""Vector Store implementation using ChromaDB."""
+"""Vector Store implementation using ChromaDB with Voyage AI embeddings."""
 import chromadb
-from chromadb.utils import embedding_functions
+from chromadb import EmbeddingFunction, Documents, Embeddings
 from typing import List, Dict, Any, Optional
 import os
 
 
+class VoyageAIEmbeddingFunction(EmbeddingFunction):
+    """Voyage AI embedding function for ChromaDB."""
+
+    def __init__(self, api_key: str, model_name: str = "voyage-code-2"):
+        import voyageai
+        self.voyage = voyageai.Client(api_key=api_key)
+        self.model_name = model_name
+
+    def __call__(self, input: Documents) -> Embeddings:
+        """Embed documents with document input_type for indexing."""
+        result = self.voyage.embed(
+            list(input), model=self.model_name, input_type="document"
+        )
+        return result.embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a query with query input_type for better retrieval accuracy."""
+        result = self.voyage.embed(
+            [text], model=self.model_name, input_type="query"
+        )
+        return result.embeddings[0]
+
+
 class CodebaseVectorStore:
-    """Vector store for code embeddings using ChromaDB."""
+    """Vector store for code embeddings using ChromaDB + Voyage AI."""
 
     def __init__(
         self,
         collection_name: str = "codebase",
         persist_directory: str = "./chroma_db"
     ):
-        # Initialize ChromaDB with persistence
         self.client = chromadb.PersistentClient(path=persist_directory)
 
-        # Use OpenAI embeddings (can swap for sentence-transformers)
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            self.embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key,
-                model_name="text-embedding-3-small"
-            )
-        else:
-            # Fallback to sentence-transformers (free, local)
-            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            )
+        api_key = os.getenv("VOYAGE_API_KEY")
+        if not api_key:
+            raise ValueError("VOYAGE_API_KEY environment variable is required")
+
+        self.embedding_fn = VoyageAIEmbeddingFunction(api_key=api_key)
 
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
@@ -54,9 +69,10 @@ class CodebaseVectorStore:
         n_results: int = 5,
         where: Optional[Dict] = None
     ) -> List[Dict]:
-        """Query the vector store."""
+        """Query the vector store using a semantically correct query embedding."""
+        query_embedding = self.embedding_fn.embed_query(query)
         results = self.collection.query(
-            query_texts=[query],
+            query_embeddings=[query_embedding],
             n_results=n_results,
             where=where
         )
