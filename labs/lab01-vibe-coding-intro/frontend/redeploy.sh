@@ -27,51 +27,61 @@ if ! command -v vercel &> /dev/null; then
     npm i -g vercel
 fi
 
-echo "📝 Backend URL Setup"
-echo "-------------------"
-echo ""
-echo "You need to set the NEXT_PUBLIC_API_URL environment variable"
-echo "to your Railway backend URL."
+echo "� Getting existing backend URL from Vercel..."
 echo ""
 
-read -p "Do you have your Railway backend URL? (y/n) " -n 1 -r
-echo ""
+# Pull existing env vars to get the backend URL
+vercel env pull .env.vercel.tmp 2>&1 > /dev/null
 
-if [[ $REPLY =~ ^[Nn]$ ]]; then
-    echo ""
-    echo "To get your Railway backend URL:"
-    echo "1. Open a new terminal"
-    echo "2. cd /Users/eagle/code/ai_training/labs/lab01-vibe-coding-intro/backend"
-    echo "3. railway status"
-    echo "4. Copy the URL and come back here"
-    echo ""
-    exit 0
+# Try to extract NEXT_PUBLIC_API_URL from existing Vercel config
+# If it doesn't exist, we'll use a default
+if [ -f ".env.vercel.tmp" ]; then
+    BACKEND_URL=$(grep NEXT_PUBLIC_API_URL .env.vercel.tmp | cut -d'=' -f2 | tr -d '"')
+    rm -f .env.vercel.tmp
 fi
 
-echo ""
-read -p "Enter your Railway backend URL (e.g., https://your-app.up.railway.app): " BACKEND_URL
-
+# If still empty, check the production env vars
 if [ -z "$BACKEND_URL" ]; then
-    echo "❌ No URL provided. Exiting."
-    exit 1
+    echo "ℹ️  No existing backend URL found in Vercel environment."
+    echo "   Using the same Railway backend from previous deployments..."
+    # Use the existing backend - we'll reuse the same env var from Vercel
+    REUSE_ENV=true
+else
+    echo "✅ Found existing backend URL: $BACKEND_URL"
+    REUSE_ENV=false
 fi
 
 echo ""
-echo "Setting environment variable on Vercel..."
-echo "$BACKEND_URL" | vercel env add NEXT_PUBLIC_API_URL production
+echo "🆕 Creating a NEW Vercel project (keeping old one intact)..."
+# Generate a random suffix for the project name
+RANDOM_SUFFIX=$(date +%s | tail -c 6)
+NEW_PROJECT_NAME="url-shortener-${RANDOM_SUFFIX}"
+echo "   Project name: $NEW_PROJECT_NAME"
 
 echo ""
-echo "🚀 Deploying to Vercel..."
-vercel --prod
+echo "🚀 Deploying to Vercel with a new random URL..."
+echo "   (This creates a separate project, doesn't touch frontend-six-ivory-30.vercel.app)"
+
+if [ "$REUSE_ENV" = true ]; then
+    echo "   Using existing backend URL from Vercel environment..."
+    vercel --prod --name "$NEW_PROJECT_NAME"
+else
+    echo "   Setting backend URL: $BACKEND_URL"
+    vercel --prod --name "$NEW_PROJECT_NAME" -e NEXT_PUBLIC_API_URL="$BACKEND_URL"
+fi
 
 echo ""
 echo "🎉 Deployment complete!"
 echo ""
-echo "✅ API routes created:"
-echo "   - /app/api/shorten/route.ts"
-echo "   - /app/api/urls/route.ts"
+echo "🆕 This is a NEW separate project with its own random Vercel URL"
+echo "   Old project (frontend-six-ivory-30.vercel.app) is still active"
 echo ""
-echo "✅ Environment variable set:"
-echo "   NEXT_PUBLIC_API_URL = $BACKEND_URL"
+if [ "$REUSE_ENV" = false ]; then
+    echo "✅ Environment variable set:"
+    echo "   NEXT_PUBLIC_API_URL = $BACKEND_URL"
+else
+    echo "✅ Using existing backend configuration from Vercel"
+fi
 echo ""
-echo "🌐 Test your frontend now!"
+echo "🌐 Your new deployment will use the same Railway backend!"
+echo "   Test your new URL once deployment completes."

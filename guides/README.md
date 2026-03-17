@@ -49,7 +49,7 @@ Connect with fellow students and alumni.
 - Networking opportunities
 
 ### 🤝 **[Team Collaboration](./team-collaboration.md)**
-Essential practices for contractors working in teams on AI projects.
+Essential practices for AI Engineers working in teams on AI projects.
 - Code review practices for AI systems
 - Version control workflows for agents and prompts
 - Documentation standards and ADRs

@@ -1,4 +1,4 @@
-"""LLM client abstraction for Code Analyzer."""
+"""LLM client abstraction for the RAG system."""
 import os
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
@@ -24,7 +24,7 @@ class LLMClient(ABC):
 
 
 class AnthropicClient(LLMClient):
-    """Anthropic Claude client with tool-use support."""
+    """Anthropic Claude client."""
 
     def __init__(self, model: str = None):
         from anthropic import Anthropic
@@ -32,8 +32,7 @@ class AnthropicClient(LLMClient):
         self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
 
     def chat(self, messages: List[Dict[str, str]], system: str = "") -> str:
-        """Plain text chat — backward compatible."""
-        # Pull system message out of messages list if present
+        """Plain text chat."""
         filtered = []
         sys_text = system
         for m in messages:
@@ -59,18 +58,6 @@ class AnthropicClient(LLMClient):
         system: str = "",
         max_tokens: int = 4096,
     ) -> Dict[str, Any]:
-        """
-        Call the Anthropic API with tool definitions.
-
-        Returns a normalised dict:
-          {
-            "content": [
-              {"type": "text", "text": "..."},
-              {"type": "tool_use", "id": "...", "name": "...", "input": {...}},
-            ],
-            "stop_reason": "end_turn" | "tool_use",
-          }
-        """
         kwargs: Dict[str, Any] = {}
         if system:
             kwargs["system"] = system
@@ -83,7 +70,6 @@ class AnthropicClient(LLMClient):
             **kwargs
         )
 
-        # Normalise SDK objects → plain dicts so agent code is SDK-agnostic
         content_blocks: List[Dict] = []
         for block in response.content:
             if block.type == "text":
@@ -111,7 +97,8 @@ class OpenAIClient(LLMClient):
         self.model = model
 
     def chat(self, messages: List[Dict[str, str]], system: str = "") -> str:
-        msgs = [{"role": "system", "content": system}] + list(messages) if system else list(messages)
+        msgs = ([{"role": "system", "content": system}] + list(messages)
+                if system else list(messages))
         response = self.client.chat.completions.create(
             model=self.model,
             messages=msgs

@@ -1,0 +1,62 @@
+[
+  {
+    "question": "What does the precision_at_k function calculate?",
+    "expected_answer": "precision_at_k calculates the fraction of the top k retrieved documents that are relevant. It counts the overlap between retrieved_k and the relevant set, then divides by k.",
+    "relevant_files": ["rag/evaluation.py"]
+  },
+  {
+    "question": "How does CodeChunker split Python files into chunks?",
+    "expected_answer": "CodeChunker splits Python files using a regex that matches def, async def, and class definitions. It first extracts module-level header code (imports, constants), then creates one chunk per function or class.",
+    "relevant_files": ["rag/chunker.py"]
+  },
+  {
+    "question": "What is the default number of results returned by a RAG query?",
+    "expected_answer": "The default number of results (n_results) is 5, as defined in the CodebaseRAG.query method signature.",
+    "relevant_files": ["rag/pipeline.py"]
+  },
+  {
+    "question": "How is MRR (Mean Reciprocal Rank) calculated in the evaluator?",
+    "expected_answer": "MRR iterates over the retrieved document list, finds the first one that appears in the relevant set, and returns 1 divided by its 1-based rank. If no relevant document is found, it returns 0.",
+    "relevant_files": ["rag/evaluation.py"]
+  },
+  {
+    "question": "What directories does index_directory skip when crawling a codebase?",
+    "expected_answer": "index_directory skips .git, node_modules, __pycache__, .venv, venv, dist, build, and .next directories.",
+    "relevant_files": ["rag/pipeline.py"]
+  },
+  {
+    "question": "What is the system prompt used when generating RAG answers?",
+    "expected_answer": "The system prompt instructs the assistant to answer questions about code using provided context accurately, to say when context is insufficient, and to reference specific files and line numbers when possible.",
+    "relevant_files": ["rag/pipeline.py"]
+  },
+  {
+    "question": "How does recall_at_k differ from precision_at_k?",
+    "expected_answer": "recall_at_k measures what fraction of all relevant documents were retrieved in the top k (divides by the total number of relevant docs), while precision_at_k measures what fraction of the top k results are relevant (divides by k).",
+    "relevant_files": ["rag/evaluation.py"]
+  },
+  {
+    "question": "What programming language file extensions does the chunker recognize?",
+    "expected_answer": "The chunker recognizes .py (Python), .js and .jsx (JavaScript), .ts and .tsx (TypeScript), .java (Java), .go (Go), .rs (Rust), and .rb (Ruby).",
+    "relevant_files": ["rag/chunker.py"]
+  },
+  {
+    "question": "How is chunk overlap implemented in the generic text chunker?",
+    "expected_answer": "When a chunk exceeds chunk_size, it is saved. Overlap is preserved by keeping the last N lines from the just-saved chunk (where N = chunk_overlap / 50). Those lines become the start of the next chunk.",
+    "relevant_files": ["rag/chunker.py"]
+  },
+  {
+    "question": "What HTTP endpoints does the FastAPI application expose?",
+    "expected_answer": "The app exposes: POST /index/directory, POST /index/files, POST /query, POST /evaluate, POST /evaluate/default, GET /stats, DELETE /index, and GET /health.",
+    "relevant_files": ["main.py"]
+  },
+  {
+    "question": "How does the vector store persist data between restarts?",
+    "expected_answer": "The vector store uses chromadb.PersistentClient pointed at a local directory (default ./chroma_db), which writes the HNSW index and metadata to disk so they survive process restarts.",
+    "relevant_files": ["rag/vector_store.py"]
+  },
+  {
+    "question": "What metadata fields are stored with each code chunk?",
+    "expected_answer": "Each chunk stores: filename, language, type (header/function/class/block), name (for functions and classes), line_start, and optionally line_end for generic blocks.",
+    "relevant_files": ["rag/chunker.py"]
+  }
+]

@@ -2,6 +2,7 @@
 from typing import List, Dict, Any, Optional
 from .vector_store import CodebaseVectorStore
 from .chunker import CodeChunker
+import asyncio
 import os
 
 
@@ -172,3 +173,83 @@ class CodebaseRAG:
     def clear_index(self) -> None:
         """Clear the index."""
         self.vector_store.clear()
+
+    async def index_github(
+        self,
+        repo_url: str,
+        branch: Optional[str] = None,
+        clear_existing: bool = True
+    ) -> Dict[str, Any]:
+        """Index a public GitHub repository by URL."""
+        import re
+        import httpx
+
+        match = re.match(
+            r'https?://github\.com/([^/\s]+)/([^/\s.]+?)(?:\.git)?/?$',
+            repo_url.strip()
+        )
+        if not match:
+            raise ValueError(f"Invalid GitHub URL: {repo_url}")
+        owner, repo = match.group(1), match.group(2)
+
+        headers = {"Accept": "application/vnd.github+json"}
+        token = os.getenv("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        CODE_EXTENSIONS = {
+            '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.go',
+            '.rs', '.rb', '.cs', '.cpp', '.c', '.h', '.php',
+            '.swift', '.kt', '.scala', '.md',
+        }
+
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
+            if not branch:
+                r = await client.get(f"https://api.github.com/repos/{owner}/{repo}")
+                r.raise_for_status()
+                branch = r.json()["default_branch"]
+
+            r = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}",
+                params={"recursive": "1"}
+            )
+            r.raise_for_status()
+
+            tree_items = [
+                item for item in r.json().get("tree", [])
+                if item["type"] == "blob"
+                and any(item["path"].endswith(ext) for ext in CODE_EXTENSIONS)
+                and item.get("size", 0) < 100_000
+            ][:150]
+
+            file_contents: Dict[str, str] = {}
+            batch_size = 10
+            for i in range(0, len(tree_items), batch_size):
+                batch = tree_items[i: i + batch_size]
+                responses = await asyncio.gather(
+                    *[
+                        client.get(
+                            f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{item['path']}"
+                        )
+                        for item in batch
+                    ],
+                    return_exceptions=True
+                )
+                for item, resp in zip(batch, responses):
+                    if isinstance(resp, Exception):
+                        continue
+                    if resp.status_code == 200:
+                        try:
+                            file_contents[item["path"]] = resp.text
+                        except Exception:
+                            pass
+
+        if clear_existing:
+            self.vector_store.clear()
+
+        chunk_count = self.index_files(file_contents)
+        return {
+            "indexed_chunks": chunk_count,
+            "files_indexed": len(file_contents),
+            "repo": f"{owner}/{repo}@{branch}",
+        }

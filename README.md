@@ -1,6 +1,6 @@
 # Agentic AI Intensive Training Program
 
-## 1-Week Full-Time Training for Senior Contractors
+## 1-Week Full-Time Training for Senior AI Engineers
 
 ```
  _____ _____ _____ _____ _____ _____ _____    _____ _____
@@ -15,7 +15,7 @@ From Zero GenAI Experience to Production-Ready in 5 Days
 
 ## Program Overview
 
-This intensive 40-hour training program transforms experienced software engineers into productive agentic AI practitioners. Designed for contractors who work with multiple clients, this program emphasizes:
+This intensive 40-hour training program transforms experienced software engineers into productive agentic AI practitioners. Designed for AI Engineers who work with multiple clients, this program emphasizes:
 
 - **LLM-Agnostic Skills**: Work with Claude, GPT-4, Gemini, or any model
 - **Real-World Engineering**: Production patterns, not toy examples
@@ -449,7 +449,7 @@ Connect with fellow AI engineers and continue learning:
 - Networking and community forums
 
 ### 👥 [Team Collaboration](guides/team-collaboration.md)
-Best practices for contractors working in teams on AI projects:
+Best practices for AI Engineers working in teams on AI projects:
 - Code review practices for AI systems
 - Version control workflows for agents and prompts
 - Documentation standards and templates

@@ -1,17 +1,15 @@
 """RAG System - FastAPI Application."""
 import os
-import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables — local .env takes priority; ~/.env as fallback
 load_dotenv()
+load_dotenv(os.path.expanduser("~/.env"), override=False)
 
-# Add parent path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../lab02-code-analyzer-agent/python'))
 from llm_client import get_llm_client
 
 from rag import CodebaseRAG, RAGEvaluator, create_eval_dataset
@@ -50,6 +48,13 @@ class IndexFilesRequest(BaseModel):
     files: Dict[str, str]  # filename -> content
 
 
+class IndexGithubRequest(BaseModel):
+    """Request to index a public GitHub repository."""
+    repo_url: str
+    branch: Optional[str] = None
+    clear_existing: bool = True
+
+
 class EvalRequest(BaseModel):
     """Request for evaluation."""
     examples: List[Dict[str, Any]]
@@ -74,6 +79,22 @@ async def index_directory(request: IndexDirectoryRequest):
     try:
         count = rag.index_directory(request.directory, request.extensions)
         return {"indexed_chunks": count, "directory": request.directory}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/index/github")
+async def index_github_repo(request: IndexGithubRequest):
+    """Index a public GitHub repository."""
+    try:
+        result = await rag.index_github(
+            request.repo_url,
+            request.branch,
+            request.clear_existing
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -131,6 +152,26 @@ async def clear_index():
     """Clear the index."""
     rag.clear_index()
     return {"status": "cleared"}
+
+
+@app.post("/evaluate/default")
+async def evaluate_default():
+    """Run evaluation using the built-in dataset from data/eval_dataset.json."""
+    import json
+    dataset_path = os.path.join(os.path.dirname(__file__), "data", "eval_dataset.json")
+    try:
+        with open(dataset_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="data/eval_dataset.json not found")
+    try:
+        examples = create_eval_dataset(raw)
+        evaluator = RAGEvaluator(rag, llm)
+        retrieval_metrics = evaluator.evaluate_retrieval(examples)
+        generation_metrics = evaluator.evaluate_generation(examples)
+        return {"retrieval": retrieval_metrics, "generation": generation_metrics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")

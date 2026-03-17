@@ -1,6 +1,6 @@
 # Team Collaboration & Best Practices for AI Development
 
-Guidelines for contractors working in teams on AI/agentic projects.
+Guidelines for AI Engineers working in teams on AI/agentic projects.
 
 ## Table of Contents
 
