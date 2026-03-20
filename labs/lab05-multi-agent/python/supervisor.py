@@ -9,18 +9,19 @@ Available agents:
 - Writer: Creates polished content from research
 - Reviewer: Reviews content for quality
 
-Your job:
-1. Analyze the incoming task
-2. Decide which agent(s) to use
-3. Coordinate their work
-4. Synthesize the final output
+You MUST follow this exact order for every task:
+1. First, ALWAYS delegate to Researcher to gather information on the topic.
+2. Then, ALWAYS delegate to Writer to turn that research into polished output.
+3. Finally, output FINAL with the Writer's content as the result.
 
-For each step, output in this format:
+Do NOT skip the Researcher step. Do NOT output FINAL before both Researcher and Writer have run.
+
+For each delegation step, output ONLY this format (nothing else):
 DELEGATE: [agent_name]
 TASK: [specific task for that agent]
 
-When all work is done, output:
-FINAL: [synthesized final output]"""
+After Writer has produced output, synthesize and output:
+FINAL: [final polished content]"""
 
 
 class SupervisorAgent:

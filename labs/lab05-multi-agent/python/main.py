@@ -1,5 +1,12 @@
 """Multi-agent API."""
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load API keys: $HOME/.env for credentials, local .env overrides (e.g. LLM_PROVIDER)
+load_dotenv(Path.home() / ".env")
+load_dotenv(override=True)  # local .env takes precedence
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
