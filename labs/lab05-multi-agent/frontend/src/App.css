@@ -1,0 +1,246 @@
+/* ── layout ── */
+.page {
+  min-height: 100vh;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.wrap {
+  max-width: 660px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* ── header ── */
+.hdr {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: #1c1c1e;
+}
+
+.sub {
+  font-size: 0.8rem;
+  color: #8e8e93;
+  margin-top: 3px;
+}
+
+.chip {
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #f0f0ff;
+  color: #5856d6;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* ── card ── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e5ea;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── form elements ── */
+.lbl {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #3a3a3c;
+}
+
+.ta {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: #1c1c1e;
+  background: #fafaf9;
+  border: 1px solid #e5e5ea;
+  border-radius: 8px;
+  padding: 0.65rem 0.875rem;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ta:focus {
+  border-color: #8e8e93;
+  background: #ffffff;
+}
+
+.ta::placeholder {
+  color: #c7c7cc;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.controls-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dim {
+  font-size: 0.78rem;
+  color: #aeaeb2;
+}
+
+.hint-key {
+  display: none;
+}
+
+@media (min-width: 480px) {
+  .hint-key {
+    display: inline;
+  }
+}
+
+.sel {
+  font-family: inherit;
+  font-size: 0.8rem;
+  border: 1px solid #e5e5ea;
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  background: #fafaf9;
+  color: #1c1c1e;
+  outline: none;
+  cursor: pointer;
+}
+
+.btn {
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: #1c1c1e;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1.5rem;
+  cursor: pointer;
+  letter-spacing: -0.01em;
+  transition: background 0.15s, opacity 0.15s;
+  min-width: 68px;
+}
+
+.btn:hover:not(:disabled) {
+  background: #3a3a3c;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.err {
+  font-size: 0.8rem;
+  color: #ff3b30;
+}
+
+/* ── output card ── */
+.out-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: #8e8e93;
+  padding: 0.4rem 0;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5856d6;
+  flex-shrink: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* ── markdown output ── */
+.md {
+  font-size: 0.875rem;
+  color: #1c1c1e;
+  line-height: 1.75;
+}
+
+.md h1 { font-size: 1.1rem;  font-weight: 600; letter-spacing: -0.02em; margin: 1rem 0 0.45rem; }
+.md h2 { font-size: 1rem;    font-weight: 600; letter-spacing: -0.015em; margin: 0.9rem 0 0.4rem; }
+.md h3 { font-size: 0.9rem;  font-weight: 600; margin: 0.75rem 0 0.35rem; }
+.md h1:first-child,
+.md h2:first-child,
+.md h3:first-child { margin-top: 0; }
+
+.md p             { margin-bottom: 0.6rem; }
+.md p:last-child  { margin-bottom: 0; }
+
+.md ul,
+.md ol            { padding-left: 1.4rem; margin-bottom: 0.6rem; }
+.md li            { margin-bottom: 0.2rem; }
+
+.md strong        { font-weight: 600; }
+.md em            { font-style: italic; }
+
+.md a             { color: #5856d6; text-decoration: underline; text-underline-offset: 2px; }
+
+.md code {
+  font-family: 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
+  font-size: 0.82em;
+  background: #f4f4f5;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.md pre {
+  background: #f4f4f5;
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  margin-bottom: 0.6rem;
+}
+
+.md pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.82em;
+}
+
+.md blockquote {
+  border-left: 3px solid #e5e5ea;
+  padding-left: 0.75rem;
+  color: #6e6e73;
+  margin: 0.5rem 0 0.6rem;
+}
+
+.md hr {
+  border: none;
+  border-top: 1px solid #e5e5ea;
+  margin: 1rem 0;
+}
