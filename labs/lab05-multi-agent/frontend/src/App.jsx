@@ -51,7 +51,7 @@ export default function App() {
         <header className="hdr">
           <div>
             <h1 className="title">Agent Workspace</h1>
-            <p className="sub">Researcher → Writer · powered by Claude</p>
+            <p className="sub">Researcher → Writer · multi-agent system</p>
           </div>
           {result && (
             <span className="chip">{result.steps_taken} steps</span>
