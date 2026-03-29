@@ -1,4 +1,5 @@
-from __future__ import annotations
+from typing import Optional, Tuple
+
 
 SYSTEM_PROMPT = """\
 You are an expert code reviewer. Analyze the provided code and return a structured review as \
@@ -35,7 +36,7 @@ Rules:
 """
 
 
-def build_review_prompt(code: str, language: str, filename: str | None = None) -> tuple[str, str]:
+def build_review_prompt(code: str, language: str, filename: Optional[str] = None) -> Tuple[str, str]:
     file_hint = f" (file: {filename})" if filename else ""
     user = (
         f"Review the following {language} code{file_hint}.\n\n"

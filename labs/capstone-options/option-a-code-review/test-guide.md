@@ -38,8 +38,9 @@ This guide walks through testing the system both locally and against the product
 | Local       | Backend API | `http://localhost:8000` |
 | Local       | Frontend UI | `http://localhost:5173` |
 | Local       | Swagger docs| `http://localhost:8000/docs` |
-| Production  | Backend API | *(set by Railway — see deploy output)* |
-| Production  | Frontend UI | *(set by Vercel — see deploy output)* |
+| Production  | Backend API | https://code-review-bot-production-6392.up.railway.app |
+| Production  | Swagger docs| https://code-review-bot-production-6392.up.railway.app/docs |
+| Production  | Frontend UI | https://code-review-bot-ui-1774781152.vercel.app |
 
 ---
 
@@ -80,7 +81,7 @@ curl http://localhost:8000/health
 
 Expected:
 ```json
-{ "status": "healthy", "model": "claude-3-5-haiku-20241022" }
+{ "status": "healthy", "model": "claude-haiku-4-5-20251001" }
 ```
 
 ---
@@ -222,7 +223,7 @@ Take note of the printed URL — you need it for the next step.
 ### 2.2 Deploy the frontend to Vercel
 
 ```bash
-VITE_API_URL=https://<your-railway-url> ./deploy_vercel.sh
+VITE_API_URL=https://code-review-bot-production-6392.up.railway.app ./deploy_vercel.sh
 ```
 
 The script will:
@@ -235,22 +236,20 @@ The script will:
 
 ```bash
 cd python
-railway variables --set "ALLOWED_ORIGINS=https://code-review-bot-ui.vercel.app"
+railway variables --set "ALLOWED_ORIGINS=https://code-review-bot-ui-1774781152.vercel.app,http://localhost:5173,http://localhost:3000"
 ```
-
-Replace the URL with the one printed by `deploy_vercel.sh`.
 
 ---
 
 ### 2.4 Production health check
 
 ```bash
-curl https://<your-railway-url>/health
+curl https://code-review-bot-production-6392.up.railway.app/health
 ```
 
 Expected:
 ```json
-{ "status": "healthy", "model": "claude-3-5-haiku-20241022" }
+{ "status": "healthy", "model": "claude-haiku-4-5-20251001" }
 ```
 
 ---
@@ -258,7 +257,7 @@ Expected:
 ### 2.5 Production review test
 
 ```bash
-curl -s -X POST https://<your-railway-url>/review \
+curl -s -X POST https://code-review-bot-production-6392.up.railway.app/review \
   -H "Content-Type: application/json" \
   -d '{
     "language": "python",
@@ -271,7 +270,7 @@ curl -s -X POST https://<your-railway-url>/review \
 
 ### 2.6 Production UI smoke test
 
-1. Open your Vercel URL in a browser.
+1. Open https://code-review-bot-ui-1774781152.vercel.app in a browser.
 2. Paste any code snippet.
 3. Select the language and click **Review Code**.
 4. Confirm results render correctly and the score bar appears.

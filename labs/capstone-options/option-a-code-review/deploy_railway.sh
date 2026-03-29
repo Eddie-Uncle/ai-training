@@ -39,8 +39,7 @@ info "API key found (${ANTHROPIC_KEY:0:14}…)"
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-}"
 
 if [[ -z "$ALLOWED_ORIGINS" ]]; then
-  warn "ALLOWED_ORIGINS is not set."
-  read -rp "Enter the Vercel frontend URL (or press Enter to skip / set later): " ALLOWED_ORIGINS
+  warn "ALLOWED_ORIGINS not set — will be updated after frontend deploys."
 fi
 
 # ── link or create Railway project ───────────────────────────────────────────
@@ -54,15 +53,14 @@ fi
 
 # ── deploy ────────────────────────────────────────────────────────────────────
 info "Deploying backend to Railway…"
-railway up --detach
+railway up
 
 # give Railway a moment to register the service before setting vars
-sleep 5
 
 # ── set environment variables ─────────────────────────────────────────────────
 info "Setting environment variables on Railway…"
 railway variables --set "ANTHROPIC_API_KEY=$ANTHROPIC_KEY"
-railway variables --set "LLM_MODEL=claude-3-5-haiku-20241022"
+railway variables --set "LLM_MODEL=claude-haiku-4-5-20251001"
 
 if [[ -n "$ALLOWED_ORIGINS" ]]; then
   railway variables --set "ALLOWED_ORIGINS=$ALLOWED_ORIGINS"

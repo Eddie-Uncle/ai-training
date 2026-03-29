@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Annotated, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
@@ -36,7 +35,7 @@ SUPPORTED_LANGUAGES = {
 limiter = Limiter(key_func=get_remote_address, default_limits=["20/minute"])
 
 # ── lifespan (instantiate reviewer once at startup) ───────────────────────────
-reviewer: CodeReviewer | None = None
+reviewer: Optional[CodeReviewer] = None
 
 
 @asynccontextmanager
@@ -79,7 +78,7 @@ app.add_middleware(
 class ReviewRequest(BaseModel):
     code: str = Field(..., min_length=1, description="Source code to review")
     language: str = Field(..., min_length=1, description="Programming language (e.g. python)")
-    filename: str | None = Field(None, description="Optional filename for context")
+    filename: Optional[str] = Field(None, description="Optional filename for context")
 
     @field_validator("code")
     @classmethod
@@ -112,7 +111,7 @@ async def health() -> dict:
 
 @app.post("/review", response_model=ReviewResponse, summary="Review code")
 @limiter.limit("20/minute")
-async def review_code(request: Request, body: ReviewRequest) -> ReviewResponse:
+async def review_code(request: Request, body: Annotated[ReviewRequest, Body()]) -> ReviewResponse:
     logger.info(
         "Review request — language=%s  filename=%s  chars=%d",
         body.language,

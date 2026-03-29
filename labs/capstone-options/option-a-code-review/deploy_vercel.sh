@@ -59,7 +59,10 @@ npm run build
 # ── deploy to Vercel ──────────────────────────────────────────────────────────
 info "Deploying to Vercel…"
 
-VERCEL_OUTPUT=$(vercel --prod --yes --name "code-review-bot-ui" \
+PROJECT_NAME="code-review-bot-ui-$(date +%s)"
+info "Creating new project: $PROJECT_NAME"
+
+VERCEL_OUTPUT=$(vercel --prod --yes --name "$PROJECT_NAME" \
   --env "VITE_API_URL=$VITE_API_URL" \
   --build-env "VITE_API_URL=$VITE_API_URL" 2>&1)
 

@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import json
 import logging
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ReviewIssue(BaseModel):
     severity: Literal["critical", "high", "medium", "low"]
     category: Literal["bug", "security", "performance", "style"]
-    line: int | None = None
+    line: Optional[int] = None
     description: str
     suggestion: str
 
@@ -45,7 +43,7 @@ class CodeReviewer:
         self,
         code: str,
         language: str,
-        filename: str | None = None,
+        filename: Optional[str] = None,
     ) -> ReviewResponse:
         system, user = build_review_prompt(code, language, filename)
         raw = self._llm.complete(system=system, user=user)
