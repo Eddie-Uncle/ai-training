@@ -64,9 +64,9 @@ export function App() {
       </main>
 
       <footer className="app-footer">
-        Powered by <a href="https://www.anthropic.com" target="_blank" rel="noreferrer">Claude</a>
+        Powered by <a href="https://github.com/ebsantos" target="_blank" rel="noreferrer">Edson Santos</a>
         {" · "}
-        <a href="/docs" target="_blank" rel="noreferrer">API docs</a>
+        <a href="https://code-review-bot-production-6392.up.railway.app/docs" target="_blank" rel="noreferrer">API docs</a>
       </footer>
     </div>
   );
