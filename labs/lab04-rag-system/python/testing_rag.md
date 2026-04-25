@@ -1,5 +1,18 @@
 ****# Lab 04 — RAG System: Testing Guide
 
+## Stack
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| **API framework** | FastAPI 0.109 + Uvicorn 0.27 | Python 3.x |
+| **Vector database** | ChromaDB 0.4.22 | Persisted locally at `./chroma_db`; cosine-similarity HNSW index |
+| **Embedding model** | Voyage AI `voyage-code-2` | Via `voyageai` SDK; separate `document` / `query` input types |
+| **LLM** | Anthropic Claude (`claude-3-haiku-20240307` default) | Overridable via `ANTHROPIC_MODEL` env var |
+| **Frontend** | Next.js 14 + React 18 + Tailwind CSS | Deployed on Vercel |
+| **Backend deployment** | Railway | `Procfile` → `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+
+---
+
 ## Prerequisites
 
 ```bash
